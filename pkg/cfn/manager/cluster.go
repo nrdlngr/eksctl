@@ -25,8 +25,8 @@ func (c *StackCollection) makeClusterStackName() string {
 	return "eksctl-" + c.spec.Metadata.Name + "-cluster"
 }
 
-// CreateCluster creates the cluster
-func (c *StackCollection) CreateCluster(errs chan error, _ interface{}) error {
+// createClusterTask creates the cluster
+func (c *StackCollection) createClusterTask(errs chan error) error {
 	name := c.makeClusterStackName()
 	logger.Info("building cluster stack %q", name)
 	stack := builder.NewClusterResourceSet(c.provider, c.spec)
@@ -34,7 +34,7 @@ func (c *StackCollection) CreateCluster(errs chan error, _ interface{}) error {
 		return err
 	}
 
-	// Unlike with `CreateNodeGroup`, all tags are already set for the cluster stack
+	// Unlike with `createNodeGroupTask`, all tags are already set for the cluster stack
 	return c.CreateStack(name, stack, nil, nil, errs)
 }
 
@@ -58,13 +58,13 @@ func (c *StackCollection) DescribeClusterStack() (*Stack, error) {
 
 // DeleteCluster deletes the cluster
 func (c *StackCollection) DeleteCluster(force bool) error {
-	_, err := c.DeleteStack(c.makeClusterStackName(), force)
+	_, err := c.DeleteStackByName(c.makeClusterStackName(), force)
 	return err
 }
 
 // WaitDeleteCluster waits till the cluster is deleted
 func (c *StackCollection) WaitDeleteCluster(force bool) error {
-	return c.BlockingWaitDeleteStack(c.makeClusterStackName(), force)
+	return c.BlockingWaitDeleteStackByName(c.makeClusterStackName(), force)
 }
 
 // AppendNewClusterStackResource will update cluster

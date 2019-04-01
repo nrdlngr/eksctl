@@ -76,31 +76,33 @@ func doDeleteCluster(p *api.ProviderConfig, cfg *api.ClusterConfig, nameArg stri
 		return err
 	}
 
-	var deletedResources []string
+	stackManager := ctl.NewStackManager(cfg)
 
-	handleIfError := func(err error, name string) bool {
-		if err != nil {
-			logger.Debug("continue despite error: %v", err)
-			return true
+	handleErrors := func(errs []error, subject string) error {
+		logger.Info("%d error(s) occurred while deleting %s", len(errs), subject)
+		for _, err := range errs {
+			logger.Critical("%s\n", err.Error())
 		}
-		logger.Debug("deleted %q", name)
-		deletedResources = append(deletedResources, name)
-		return false
+		return fmt.Errorf("failed to delete %s", subject)
 	}
 
-	// We can remove all 'DeprecatedDelete*' calls in 0.2.0
-
-	stackManager := ctl.NewStackManager(cfg)
+	{
+		deprecatedStacks, err := stackManager.ListDeprecatedStacksForDeletion()
+		if stackCount := len(deprecatedStacks); stackCount > 0 {
+			errs := stackManager.SquentialWaitDeleteStacks(deprecatedStacks)
+			if len(errs) > 0 {
+				return handleErrors(errs, "deprecated stacks")
+			}
+			logger.Success("deleted all %s stacks", stackCount)
+			return nil
+		}
+	}
 
 	{
 		tryDeleteAllNodeGroups := func(force bool) error {
 			errs := stackManager.WaitDeleteAllNodeGroups(force)
 			if len(errs) > 0 {
-				logger.Info("%d error(s) occurred while deleting nodegroup(s)", len(errs))
-				for _, err := range errs {
-					logger.Critical("%s\n", err.Error())
-				}
-				return fmt.Errorf("failed to delete nodegroup(s)")
+				return handleErrors(errs, "nodegroup(s)")
 			}
 			return nil
 		}
@@ -129,13 +131,13 @@ func doDeleteCluster(p *api.ProviderConfig, cfg *api.ClusterConfig, nameArg stri
 
 	if clusterErr {
 		if handleIfError(ctl.DeprecatedDeleteControlPlane(meta), "control plane") {
-			handleIfError(stackManager.DeprecatedDeleteStackControlPlane(wait), "stack control plane (deprecated)")
+			// handleIfError(stackManager.DeprecatedDeleteStackControlPlane(wait), "stack control plane (deprecated)")
 		}
 	}
 
-	handleIfError(stackManager.DeprecatedDeleteStackServiceRole(wait), "service group (deprecated)")
-	handleIfError(stackManager.DeprecatedDeleteStackVPC(wait), "stack VPC (deprecated)")
-	handleIfError(stackManager.DeprecatedDeleteStackDefaultNodeGroup(wait), "default nodegroup (deprecated)")
+	// handleIfError(stackManager.DeprecatedDeleteStackServiceRole(wait), "service group (deprecated)")
+	// handleIfError(stackManager.DeprecatedDeleteStackVPC(wait), "stack VPC (deprecated)")
+	// handleIfError(stackManager.DeprecatedDeleteStackDefaultNodeGroup(wait), "default nodegroup (deprecated)")
 
 	ctl.MaybeDeletePublicSSHKey(meta.Name)
 
